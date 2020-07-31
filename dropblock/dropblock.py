@@ -27,6 +27,7 @@ class DropBlock2D(nn.Module):
     def __init__(self, drop_prob, block_size):
         super(DropBlock2D, self).__init__()
 
+        # drop_prob = 1 - keep_prob
         self.drop_prob = drop_prob
         self.block_size = block_size
 
@@ -42,8 +43,8 @@ class DropBlock2D(nn.Module):
             # get gamma value
             gamma = self._compute_gamma(x)
 
-            # sample mask
-            mask = (torch.rand(x.shape[0], *x.shape[2:]) < gamma).float()
+            # sample mask -- distribution: Bernoulli(gamma) 
+            mask = (torch.rand(x.shape[0], *x.shape[2:]) < gamma).float() # False,True --float()---> 0,1 
 
             # place mask on input device
             mask = mask.to(x.device)
@@ -52,9 +53,12 @@ class DropBlock2D(nn.Module):
             block_mask = self._compute_block_mask(mask)
 
             # apply block mask
+            # elemen-wise multiplication the feature map with the block_mask (tensor of 0 and 1)
             out = x * block_mask[:, None, :, :]
 
-            # scale output
+            # scale output: normalize the feature
+            #  Normalized eatures: A=A×count(M)/count_ones(M)
+            #  numel : number of element : count,  sum = count_ones 
             out = out * block_mask.numel() / block_mask.sum()
 
             return out
@@ -73,6 +77,7 @@ class DropBlock2D(nn.Module):
         return block_mask
 
     def _compute_gamma(self, x):
+        # fomular from the origin paper 
         return self.drop_prob / (self.block_size ** 2)
 
 
@@ -112,8 +117,8 @@ class DropBlock3D(DropBlock2D):
             # get gamma value
             gamma = self._compute_gamma(x)
 
-            # sample mask
-            mask = (torch.rand(x.shape[0], *x.shape[2:]) < gamma).float()
+            # sample mask -- distribution: Bernoulli(gamma) 
+            mask = (torch.rand(x.shape[0], *x.shape[2:]) < gamma).float()  
 
             # place mask on input device
             mask = mask.to(x.device)
@@ -122,6 +127,7 @@ class DropBlock3D(DropBlock2D):
             block_mask = self._compute_block_mask(mask)
 
             # apply block mask
+            # elemen-wise multiplication the feature map with the block_mask (tensor of 0 and 1)
             out = x * block_mask[:, None, :, :, :]
 
             # scale output
@@ -130,10 +136,13 @@ class DropBlock3D(DropBlock2D):
             return out
 
     def _compute_block_mask(self, mask):
+        
+        # fill the previous random mask to cover (block_size x block_size) by using: stride = (1,1,1)
         block_mask = F.max_pool3d(input=mask[:, None, :, :, :],
                                   kernel_size=(self.block_size, self.block_size, self.block_size),
                                   stride=(1, 1, 1),
                                   padding=self.block_size // 2)
+
 
         if self.block_size % 2 == 0:
             block_mask = block_mask[:, :, :-1, :-1, :-1]
